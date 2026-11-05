@@ -129,6 +129,8 @@ class BrainSupervisorToolGateway:
         from dodaios.plugins.tool.remember import RememberTool
 
         tools = self._live_tools()
+        from dodaios.plugins.tool.open_chatgpt_chat import OpenChatGPTChatTool
+        tools[OpenChatGPTChatTool.name] = OpenChatGPTChatTool()
         context = peek_computer_use_context()
         dispatcher = getattr(tools.get("computer_use"), "_dispatch", None)
         if context is not None and dispatcher is not None:
