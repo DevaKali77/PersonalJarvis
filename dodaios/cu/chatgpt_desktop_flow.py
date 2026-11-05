@@ -87,14 +87,18 @@ async def dispatch_prompt_flow(dispatch: Any, ctx: Any, *, prompt: str, target: 
             raise DesktopFlowError('Voice hangup cancelled the desktop transaction.')
         current = await asyncio.to_thread(read_foreground_target)
         title = str(getattr(current.window,'title','') or '')
-        if target.casefold() not in title.casefold():
-            raise DesktopFlowError('The foreground title does not match the requested chat.')
         import sys
         if sys.platform == 'darwin':
             from AppKit import NSRunningApplication
             app = NSRunningApplication.runningApplicationWithProcessIdentifier_(current.window.pid)
             if app is None or str(app.bundleIdentifier()) not in {'com.openai.codex', 'com.openai.chat'}:
                 raise DesktopFlowError('The foreground app is not the authorized ChatGPT/Codex app.')
+            if target.casefold() not in title.casefold():
+                from dodaios.cu.named_chat import macos_named_chat_selected
+                if not await asyncio.to_thread(macos_named_chat_selected, current.window.pid, target):
+                    raise DesktopFlowError('The named chat is not verifiably selected; no message was sent.')
+        elif target.casefold() not in title.casefold():
+            raise DesktopFlowError('The foreground title does not match the requested chat.')
         return current.signature
 
     async def type_once(text: str, expected: Any) -> None:
