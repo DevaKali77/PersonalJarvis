@@ -71,6 +71,13 @@ async def dispatch_prompt_flow(dispatch: Any, ctx: Any, *, prompt: str, target: 
     from dodaios.harness.computer_use_context import get_computer_use_context
     from dodaios.brain.local_action_gate import HARNESS_NAME
     from dodaios.voice.action_phrases import OUTPUT_LANGUAGE_ENV_KEY
+    from dodaios.cu.chat_navigation import installed_chatgpt_bundle_id
+    import sys
+    if sys.platform == "darwin" and installed_chatgpt_bundle_id() == "com.openai.codex":
+        return ToolResult(
+            success=False, output=None,
+            error="Codex/Work is not a regular ChatGPT chat. Nothing was sent.",
+        )
 
     async def observe(goal: str) -> str:
         result = await dispatch.execute({'harness': HARNESS_NAME, 'prompt': goal,
@@ -91,7 +98,7 @@ async def dispatch_prompt_flow(dispatch: Any, ctx: Any, *, prompt: str, target: 
         if sys.platform == 'darwin':
             from AppKit import NSRunningApplication
             app = NSRunningApplication.runningApplicationWithProcessIdentifier_(current.window.pid)
-            if app is None or str(app.bundleIdentifier()) not in {'com.openai.codex', 'com.openai.chat'}:
+            if app is None or str(app.bundleIdentifier()) != 'com.openai.chat':
                 raise DesktopFlowError('The foreground app is not the authorized ChatGPT/Codex app.')
             if target.casefold() not in title.casefold():
                 from dodaios.cu.named_chat import macos_named_chat_selected
