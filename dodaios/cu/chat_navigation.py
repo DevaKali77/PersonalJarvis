@@ -102,7 +102,10 @@ def launch_chatgpt_url(url: str) -> None:
     if not (url == CHATGPT_HOME or valid_conversation_url(url)):
         raise ValueError("Untrusted ChatGPT destination; refusing to navigate.")
     if sys.platform == "darwin":
-        argv = ["open", "-a", "Google Chrome", url]
+        # Native ChatGPT desktop app (Chat / Work / Codex), not Chrome. A
+        # conversation link is supplied only when the owner verified it.
+        # macOS's app bundle registers http/https URL schemes.
+        argv = ["open", "-a", "ChatGPT"] + ([] if url == CHATGPT_HOME else [url])
     elif sys.platform == "win32":
         # os.startfile would obscure launch failures; direct URL handling
         # goes through the Windows shell verb without shell=True.
