@@ -39,5 +39,5 @@ def macos_named_chat_selected(pid: int, target: str) -> bool:
         app = ax.AXUIElementCreateApplication(pid)
         window = _ax_copy_attr(app, "AXFocusedWindow")
         return bool(window is not None and selected_chat_matches(window, target, _ax_copy_attr))
-    except Exception:
+    except Exception:  # AX read failures must fail closed, never infer a selected chat.
         return False
