@@ -125,5 +125,5 @@ async def dispatch_prompt_flow(dispatch: Any, ctx: Any, *, prompt: str, target: 
         return ToolResult(success=True,output={'stdout':reply,'exit_code':0})
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except Exception as exc:  # Returned as a failed tool receipt; never silently count as sent.
         return ToolResult(success=False,output={'stderr':str(exc),'exit_code':1},error=str(exc))
