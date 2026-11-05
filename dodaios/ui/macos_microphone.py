@@ -13,7 +13,7 @@ def _origin(value: str) -> tuple[str, str, int | None] | None:
         if parsed.username or parsed.password:
             return None
         return parsed.scheme, parsed.hostname or "", parsed.port
-    except (ValueError, TypeError):
+    except (ValueError, TypeError):  # Malformed origins fail closed, no grant.
         return None
 
 
