@@ -63,7 +63,7 @@ _REQUEST_TEXT_CHARS = 1200
 # 2026-10-14, a busy catalog sorted show_on_screen past the budget).
 _PRIORITY_TOOLS = frozenset({"find-app-action", "run-app-action", *NAMED_TOOLS})
 # Declared under its canonical name in every mode (see ``declarations``).
-_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app", "chatgpt_task"})
+_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app", "open_chatgpt_chat", "chatgpt_task"})
 # One screen, one mouse: these never run side by side, and a result that
 # arrives after the user asked for something else describes a screen that has
 # moved on. ``computer_use`` is the delegated vehicle for the same screen.
@@ -848,6 +848,47 @@ class LiveTools:
                     "retryable": True,
                     "error": "arguments_json must be a JSON object. Correct it and call again.",
                 }
+        # Navigation-only utterances must never escalate to coordinate-driven
+        # screen control. A simple app launch or exact ChatGPT chat opening is
+        # deterministic, and an unknown chat URL is a refusal, not a click hunt.
+        from dodaios.cu.chat_navigation import navigation_only_request
+
+        if navigation_only_request(self.user_text or self.request_text):
+            if canonical in {"computer", "computer_use", "computer-use"}:
+                return {
+                    "success": False, "executed": False,
+                    "status": "navigation_requires_direct_tool",
+                    "error": (
+                        "This is an app/chat navigation request. Do not move the mouse, "
+                        "click tabs, bookmarks or sidebar items. Use open_app for an app "
+                        "or open_chatgpt_chat for an exact named ChatGPT conversation. "
+                        "If the chat has no saved URL, ask for its link and stop."
+                    ),
+                }
+            if canonical == "chatgpt_task":
+                return {
+                    "success": False, "executed": False,
+                    "status": "open_only_not_send",
+                    "error": (
+                        "The user asked to open a destination, not submit a prompt. "
+                        "Use open_chatgpt_chat or open_app. Nothing was sent."
+                    ),
+                }
+        if canonical == "chatgpt_task" and sys.platform == "darwin":
+            # The native ChatGPT.app on this Mac is Codex Work, not regular
+            # ChatGPT chat. Refuse BEFORE triggering the ask-tier approval.
+            from dodaios.cu.chat_navigation import installed_chatgpt_bundle_id
+            if installed_chatgpt_bundle_id() == "com.openai.codex":
+                return {
+                    "success": False, "executed": False,
+                    "status": "codex_not_regular_chatgpt",
+                    "error": (
+                        "The installed ChatGPT.app is Codex/Work, not ordinary "
+                        "ChatGPT. No cursor action or message was sent. "
+                        "Use the regular ChatGPT browser and a saved conversation "
+                        "link to navigate; Work usage limits do not apply."
+                    ),
+                }
         descriptor = next((d for d in self.catalog() if d.name == canonical), None)
         if descriptor is None:
             return {
@@ -1067,12 +1108,13 @@ class LiveTools:
                 isinstance(result.output, dict) and result.output.get("verified") is False
             ),
         }
-        if tool_name == "open_app":
+        if tool_name in {"open_app", "open_chatgpt_chat"}:
             payload["launch_accepted"] = bool(result.success)
             payload["verified"] = False
             payload["next_step"] = (
-                "Take a fresh screenshot before claiming the requested window is visible. "
-                "Previous screenshot frame IDs are stale after an app launch."
+                "The OS accepted navigation. Verify the actual displayed window with "
+                "a fresh, read-only appshot; never click around or claim a named chat "
+                "is selected from an accepted browser launch alone."
                 if result.success else "The launch failed. Do not claim the app or window opened."
             )
         images = take_images(payload)
