@@ -69,6 +69,17 @@ def _make_pipeline(bus: EventBus) -> tuple[SpeechPipeline, FakeTTS, FakePlayer]:
     return open_classic_voice_session(pipeline), tts, player
 
 
+async def test_start_muted_requires_a_deliberate_toggle() -> None:
+    bus = EventBus()
+    pipeline = SpeechPipeline(bus=bus, enable_whisper_wake=False, start_muted=True)
+    assert pipeline.is_muted
+    assert not pipeline._activation_allowed()
+    assert not pipeline._gesture_activation_allowed()
+    await bus.publish(VoiceMuteToggleRequested(source="orb_dblclick_double"))
+    assert not pipeline.is_muted
+
+
+
 @pytest.mark.asyncio
 async def test_mute_toggle_flips_flag_and_broadcasts() -> None:
     bus = EventBus()

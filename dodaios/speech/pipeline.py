@@ -2311,6 +2311,7 @@ class SpeechPipeline:
         # ``permission_gate`` (the permission service by default).
         user_activation_gate: Callable[[], bool] | None = None,
         permission_gate: Any = None,
+        start_muted: bool = False,
         # Pre-Thinking-Ack Flash-Brain (spec: 2026-05-11-pre-thinking-ack-
         # flash-brain-design.md). When provided, every user utterance kicks
         # off a parallel acknowledgment LLM call BEFORE the main brain
@@ -3115,7 +3116,7 @@ class SpeechPipeline:
         # While True, ``_activation_allowed`` returns False so the wake
         # path never fires, and every TTS exit short-circuits. The wake-
         # loop itself keeps running; unmuting is instantaneous.
-        self._muted: bool = False
+        self._muted: bool = bool(start_muted)
 
         # CRIT-5 watchdog (user decision 2026-05-17): when the user fires a
         # force-spawn-worker, the worker subprocess runs silently for the

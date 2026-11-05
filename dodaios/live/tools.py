@@ -63,7 +63,7 @@ _REQUEST_TEXT_CHARS = 1200
 # 2026-10-14, a busy catalog sorted show_on_screen past the budget).
 _PRIORITY_TOOLS = frozenset({"find-app-action", "run-app-action", *NAMED_TOOLS})
 # Declared under its canonical name in every mode (see ``declarations``).
-_DIRECT_TOOLS = frozenset({"computer", "take_appshot"})
+_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app", "open_chatgpt_chat", "chatgpt_task"})
 # One screen, one mouse: these never run side by side, and a result that
 # arrives after the user asked for something else describes a screen that has
 # moved on. ``computer_use`` is the delegated vehicle for the same screen.
@@ -331,7 +331,10 @@ class LiveTools:
         ]
         # The screen is operated in many short rounds (ADR-0039): declare the
         # computer tool under its own name instead of behind discover/call_tool.
-        # Keep capture available even with a deferred catalog. Otherwise a live
+        # Keep native app launch and capture available even with a deferred catalog.
+        # Launching an app must not require typing into Spotlight, which can
+        # be refused by Secure Input independently of native app launch.
+        # Otherwise a live
         # model may reuse an old image or choose computer instead of the appshot
         # path that owns privacy filtering, the shutter effect and the receipt.
         for descriptor in self.catalog():
@@ -814,7 +817,7 @@ class LiveTools:
                     "approval_ids": list(self._pending),
                     "next_step": "Ask for a plain yes or no, then call confirm_action again.",
                 }
-            trace, _, _, _ = self._pending.pop(approval_id)
+            trace, pending_name, _, _ = self._pending.pop(approval_id)
             from dodaios.core.model_selection import ModelSelection, use_operation_model
 
             self._confirming.add(approval_id)
@@ -830,7 +833,7 @@ class LiveTools:
                     result = await self.gateway.execute_confirmed(trace, self._request(trace))
             finally:
                 self._confirming.discard(approval_id)
-            return self._result(result)
+            return self._result(result, tool_name=pending_name)
         canonical = self._names.get(name, name)
         if name == "call_tool":
             canonical = str(args.get("name", ""))
@@ -844,6 +847,32 @@ class LiveTools:
                     "executed": False,
                     "retryable": True,
                     "error": "arguments_json must be a JSON object. Correct it and call again.",
+                }
+        # Navigation-only utterances must never escalate to coordinate-driven
+        # screen control. A simple app launch or exact ChatGPT chat opening is
+        # deterministic, and an unknown chat URL is a refusal, not a click hunt.
+        from dodaios.cu.chat_navigation import navigation_only_request
+
+        if navigation_only_request(self.user_text or self.request_text):
+            if canonical in {"computer", "computer_use", "computer-use"}:
+                return {
+                    "success": False, "executed": False,
+                    "status": "navigation_requires_direct_tool",
+                    "error": (
+                        "This is an app/chat navigation request. Do not move the mouse, "
+                        "click tabs, bookmarks or sidebar items. Use open_app for an app "
+                        "or open_chatgpt_chat for an exact named ChatGPT conversation. "
+                        "If the chat has no saved URL, ask for its link and stop."
+                    ),
+                }
+            if canonical == "chatgpt_task":
+                return {
+                    "success": False, "executed": False,
+                    "status": "open_only_not_send",
+                    "error": (
+                        "The user asked to open a destination, not submit a prompt. "
+                        "Use open_chatgpt_chat or open_app. Nothing was sent."
+                    ),
                 }
         descriptor = next((d for d in self.catalog() if d.name == canonical), None)
         if descriptor is None:
@@ -918,7 +947,7 @@ class LiveTools:
                 "impact": result.output,
                 "next_step": _APPROVAL_NEXT_STEP,
             }
-        return self._result(result)
+        return self._result(result, tool_name=canonical)
 
     @property
     def user_text(self) -> str:
@@ -1052,7 +1081,7 @@ class LiveTools:
         )
 
     @staticmethod
-    def _result(result: Any) -> dict:
+    def _result(result: Any, *, tool_name: str = "") -> dict:
         from dodaios.core.redact import redact_secrets
 
         payload = {
@@ -1060,10 +1089,19 @@ class LiveTools:
             "output": result.output,
             "error": result.error,
             "artifacts": list(getattr(result, "artifacts", ())),
-            "verified": not (
+            "verified": bool(result.success) and not (
                 isinstance(result.output, dict) and result.output.get("verified") is False
             ),
         }
+        if tool_name in {"open_app", "open_chatgpt_chat"}:
+            payload["launch_accepted"] = bool(result.success)
+            payload["verified"] = False
+            payload["next_step"] = (
+                "The OS accepted navigation. Verify the actual displayed window with "
+                "a fresh, read-only appshot; never click around or claim a named chat "
+                "is selected from an accepted browser launch alone."
+                if result.success else "The launch failed. Do not claim the app or window opened."
+            )
         images = take_images(payload)
         sanitized = json.loads(redact_secrets(json.dumps(payload, default=str)))
         sanitized["artifacts"].extend({**image, "type": "image"} for image in images)

@@ -73,7 +73,7 @@ _KNOWN_APPS_WIN: frozenset[str] = frozenset({
 
 _KNOWN_APPS_DARWIN: frozenset[str] = frozenset({
     # System (launched via `open -a <AppName>`)
-    "finder", "terminal", "iterm", "calculator", "calc", "preview",
+    "finder", "terminal", "iterm", "calculator", "calc", "preview", "codex",
     "system settings", "system preferences", "activity monitor",
     "textedit", "notes", "reminders",
     # Browser
@@ -239,7 +239,8 @@ class OpenAppTool:
     description: str = (
         "Opens an application on this computer by name (e.g. 'notepad', "
         "'calc', 'chrome', 'Google Chrome') or opens a file/URL. Works on "
-        "Windows, macOS, and Linux."
+        "Windows, macOS, and Linux. Use 'Downloads' for this user's Downloads "
+        "folder, or ~/ for this user's home; never guess a username."
     )
     schema: dict[str, Any] = {
         "type": "object",
@@ -268,9 +269,44 @@ class OpenAppTool:
 
     async def execute(self, args: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
         app_name = (args.get("app_name") or "").strip()
+        if app_name.casefold() in {"downloads", "my downloads", "downloads folder"}:
+            from dodaios.platform.user_dirs import downloads_dir
+
+            app_name = str(downloads_dir())
+        elif app_name.startswith("~/"):
+            app_name = os.path.expanduser(app_name)
         cli_args = (args.get("arguments") or "").strip()
         if not app_name:
             return ToolResult(success=False, output=None, error="app_name is missing")
+
+        # ChatGPT's NEW unified macOS desktop app contains Chat, Work and
+        # Codex under the same CFBundleIdentifier (com.openai.codex). The
+        # bundle ID is not proof of the selected mode. Open the EXISTING native
+        # window, never Chrome or an unrelated browser bookmark.
+        if detect_platform() == "darwin" and app_name.casefold() in {
+            "chatgpt", "chat gpt", "chatgpt app", "chatgpt application"
+        }:
+            try:
+                await asyncio.to_thread(
+                    subprocess.run, ["open", "-a", "ChatGPT"], shell=False,
+                    check=True, capture_output=True, timeout=10,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                return ToolResult(
+                    success=False, output=None,
+                    error=f"Could not activate the ChatGPT desktop app: {exc}. "
+                          "No mouse or browser tab clicks were attempted.",
+                )
+            return ToolResult(
+                success=True,
+                output=(
+                    "Activated the existing ChatGPT desktop app using macOS "
+                    "Launch Services (no browser, no mouse). Chat, Work and "
+                    "Codex are modes within it; the previously selected mode "
+                    "remains unchanged. No named chat was verified, and no "
+                    "message was sent."
+                ),
+            )
 
         # Off the event loop: the gate's layer-3 registry probes block (a
         # subprocess `open -Ra` on macOS, .desktop globs on Linux) and would
@@ -378,10 +414,16 @@ class OpenAppTool:
                 argv = ["open", "-a", value]
                 if cli_args:
                     argv += ["--args", *cli_args.split()]
-                subprocess.Popen(argv, shell=False)  # noqa: ASYNC220, S606
+                await asyncio.to_thread(
+                    subprocess.run, argv, shell=False, check=True,
+                    capture_output=True, timeout=10,
+                )
             elif kind == "xdg_open":
                 # Linux: `xdg-open <name>` (MIME/.desktop handler; takes no args).
-                subprocess.Popen(["xdg-open", value], shell=False)  # noqa: ASYNC220, S606
+                await asyncio.to_thread(
+                    subprocess.run, ["xdg-open", value], shell=False,
+                    check=True, capture_output=True, timeout=10,
+                )
             elif kind == "executable":
                 # Direct executable on PATH/absolute. The Windows verb passes the
                 # raw cli_args string verbatim (AD-7, unchanged); the POSIX
@@ -398,13 +440,23 @@ class OpenAppTool:
                         [value], shell=False, creationflags=no_window
                     )
             else:  # kind == "startfile" — Windows-only shell verb (AD-7).
+                from pathlib import Path
+
+                # URLs contain ":/" too, but are not local filesystem paths.
+                # Check real paths before the launcher on every OS.
+                if is_path and not is_url and not Path(value).exists():
+                    return ToolResult(
+                        success=False, output=None,
+                        error="The requested path does not exist. For this user's Downloads, "
+                        "use app_name='Downloads'; never invent a home-directory username.",
+                    )
                 if cli_args:
                     subprocess.Popen(  # noqa: ASYNC220, S606
                         ["cmd", "/c", "start", "", value, cli_args],
                         shell=False,
                         creationflags=no_window,
                     )
-                elif hasattr(os, "startfile"):
+                elif detect_platform() == "win32" and hasattr(os, "startfile"):
                     os.startfile(value)  # type: ignore[attr-defined]  # noqa: S606
                 else:
                     # POSIX: URLs/paths resolve to "startfile" on every OS
@@ -412,7 +464,10 @@ class OpenAppTool:
                     # branch), but exec'ing a URL dies with FileNotFoundError.
                     # Hand it to the OS opener instead (browser+URL fast-path).
                     opener = "open" if detect_platform() == "darwin" else "xdg-open"
-                    subprocess.Popen([opener, value], shell=False)  # noqa: ASYNC220, S606
+                    await asyncio.to_thread(
+                        subprocess.run, [opener, value], shell=False,
+                        check=True, capture_output=True, timeout=10,
+                    )
             # Actively bring the freshly launched window to the foreground. A
             # bare Popen / os.startfile is fire-and-forget: the new window is
             # frequently left in the background (Windows foreground-lock-steal,
@@ -447,7 +502,10 @@ class OpenAppTool:
                         "[open_app] raise_after_launch for %r exceeded 6s — "
                         "reporting the launch without the raise", app_name,
                     )
-                except Exception:  # noqa: BLE001 — never fail a successful launch
+                except Exception:
+                    # OS launch succeeded; optional window-raise failed, so log it
+                    # and keep the honest launch receipt rather than inventing focus.
+                    logger.debug("[open_app] window raise after launch failed for %r", app_name, exc_info=True)
                     raised = False
             from dodaios.voice.action_phrases import action_phrase  # noqa: PLC0415
 
@@ -458,7 +516,13 @@ class OpenAppTool:
                 app=app_name,
             )
             return ToolResult(success=True, output=output)
-        except FileNotFoundError:
+        except subprocess.CalledProcessError as exc:  # Return an explicit refused-launch tool error.
+            return ToolResult(
+                success=False, output=None,
+                error=f"The operating system refused the launch (exit {exc.returncode}). "
+                "The target was not confirmed open; do not report success.",
+            )
+        except FileNotFoundError:  # Caller receives a localized not-found failure.
             from dodaios.voice.action_phrases import action_phrase  # noqa: PLC0415
 
             return ToolResult(
@@ -468,5 +532,5 @@ class OpenAppTool:
                     "open_app_not_found", _output_language(ctx), app=app_name,
                 ),
             )
-        except OSError as exc:
+        except OSError as exc:  # Report the OS failure through ToolResult, not a fake success.
             return ToolResult(success=False, output=None, error=str(exc))

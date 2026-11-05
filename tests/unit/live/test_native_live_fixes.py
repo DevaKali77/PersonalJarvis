@@ -124,6 +124,22 @@ async def _settle(session) -> None:
     await asyncio.gather(*session._control_tasks, return_exceptions=True)
 
 
+@both_providers
+async def test_hangup_after_socket_disconnect_is_not_a_failed_session(call, make_provider):
+    from starlette.websockets import WebSocketDisconnect
+
+    live = call(make_provider())
+    async def disconnected(frame):
+        if frame.get("type") == "audio_closed":
+            raise WebSocketDisconnect(code=1006)
+    live.session._send_json = disconnected
+    await live.session.end(reason="hotkey")
+    assert live.session._closed.is_set()
+    assert live.session._hangup_reason == "hotkey"
+    # A duplicate close remains harmless.
+    await live.session.end(reason="hotkey")
+
+
 # 1. Readiness probe before open_session ---------------------------------------
 
 # Hang guard only, never the measured quantity: a loaded CI runner can stretch

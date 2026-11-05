@@ -607,6 +607,10 @@ class SubprocessBarOverlay:
         """Send a drop verdict down to the hosted bar (never raises)."""
         self._send({"op": "drop_result", "accepted": bool(accepted)})
 
+    def _shows_pet(self) -> bool:
+        """The plain bar has no pet; mascot surfaces override this."""
+        return False
+
     def _dispatch_speaker_toggle(self) -> None:
         """Mute / unmute the assistant's voice, here in the parent.
 

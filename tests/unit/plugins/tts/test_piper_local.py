@@ -178,7 +178,9 @@ def test_callback_capable_engine_yields_incremental_audio(
         sample_rate = 22_050
 
         def generate(self, _text, _speaker, _speed, *, callback):
-            callback(np.full(100, 0.1, dtype=np.float32), 0.5)
+            # Match sherpa-onnx: zero stops generation, one continues it.
+            if callback(np.full(100, 0.1, dtype=np.float32), 0.5) == 0:
+                return _FakeAudio(seconds=0.0)
             callback(np.full(100, 0.2, dtype=np.float32), 1.0)
             return _FakeAudio(seconds=0.0)
 
@@ -218,6 +220,37 @@ def test_voices_cover_every_supported_reply_language() -> None:
     languages = {SHERPA_BUNDLES[v].language for v in PIPER_DEFAULT_VOICES}
 
     assert {"de", "en", "es", "pt"} <= languages
+
+
+async def test_closing_stream_stops_native_generation(monkeypatch) -> None:
+    import threading
+
+    finished = threading.Event()
+    decisions = []
+
+    class Engine:
+        sample_rate = 22_050
+
+        def generate(self, _text, _speaker, _speed, *, callback):
+            try:
+                # More chunks than the queue holds: close must release a
+                # producer blocked behind a consumer that no longer reads.
+                for _ in range(30):
+                    decision = callback(np.ones(100, dtype=np.float32), 0.5)
+                    decisions.append(decision)
+                    if decision == 0:
+                        break
+                return _FakeAudio(seconds=0.0)
+            finally:
+                finished.set()
+
+    monkeypatch.setattr(PiperLocalTTS, "_resolve_voice", lambda *_: "test")
+    monkeypatch.setattr(PiperLocalTTS, "_build_engine", lambda *_: Engine())
+    stream = PiperLocalTTS().synthesize("A longer reply.")
+    await anext(stream)
+    await asyncio.wait_for(stream.aclose(), 2)
+    assert finished.is_set()
+    assert decisions[-1] == 0
 
 
 def test_default_voices_share_one_speaker_profile() -> None:

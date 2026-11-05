@@ -428,6 +428,12 @@ def _macos_ax_attr(element: object, attribute: str) -> object | None:
             AXUIElementCopyAttributeValue,
         )
 
+        # In-process AX reads enter WebKit directly on this worker thread.
+        # WebKit terminates the app instead of raising a Python exception.
+        from ApplicationServices import AXUIElementGetPid
+        error, owner_pid = AXUIElementGetPid(element, None)
+        if error == 0 and owner_pid == os.getpid():
+            return None
         error, value = AXUIElementCopyAttributeValue(element, attribute, None)
         return value if error == 0 else None
     except Exception:  # noqa: BLE001

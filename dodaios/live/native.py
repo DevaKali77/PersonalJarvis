@@ -50,6 +50,9 @@ _TOOL_DEADLINE_S = VOICE_TOOL_BUDGET_S
 _SESSION_TOOLS = frozenset({
     "end_call", "discover_tools", "call_tool", "confirm_action", "task_status",
     "computer", "take_appshot",
+    "open_app",
+    "open_chatgpt_chat",
+    "chatgpt_task",
 })
 # Under a declaration budget (a provider's ``tool_declaration_budget_tokens``
 # or ``[voice].realtime_tool_declaration_budget_tokens``, the smaller wins), at
@@ -841,4 +844,12 @@ class NativeLiveVoiceSession(LiveVoiceSession):
             else:
                 await asyncio.to_thread(self._ledger.close)
         self._closed.set()
-        await self._send_json({"type": "audio_closed"})
+        # The browser may close its socket before hangup cleanup finishes.
+        # Cleanup has succeeded; a lost final receipt must not turn a normal
+        # hangup into a failed voice session.
+        from starlette.websockets import WebSocketDisconnect
+
+        try:
+            await self._send_json({"type": "audio_closed"})
+        except (WebSocketDisconnect, ConnectionError):
+            log.debug("Voice peer disconnected before the closing receipt")

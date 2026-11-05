@@ -93,6 +93,7 @@ _EXE_ALIASES_DARWIN = {
     "chrome": "Google Chrome",
     "terminal": "Terminal",
     "finder": "Finder",
+    "codex": "ChatGPT",
 }
 
 _EXE_ALIASES_LINUX = {

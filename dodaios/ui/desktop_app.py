@@ -4964,6 +4964,9 @@ class DesktopApp:
                 realtime_audio_renderer=self.realtime_audio_renderer,
                 activation_gate=voice_activation_gate,
                 user_activation_gate=voice_user_gate,
+                # Opening the app is not permission to resume listening.
+                # The existing visible microphone control enables capture.
+                start_muted=True,
                 ack_brain=voice_ack_brain,
                 # Resolved custom-wake-word plan: drives the OWW model + the
                 # phrase matcher for the verifier + rolling-whisper.
@@ -6457,6 +6460,18 @@ class DesktopApp:
             install_macos_editor_keys()
         except Exception:  # noqa: BLE001, S110 - key routing is never load-bearing
             pass
+
+        from dodaios.ui.macos_microphone import install_macos_microphone_permission
+
+        install_macos_microphone_permission(self._url())
+
+        from dodaios.ui.macos_quit import install_macos_quit_handler
+
+        def _native_quit_requested() -> None:
+            self._user_requested_quit = True
+            self._begin_quit_from_close()
+
+        install_macos_quit_handler(_native_quit_requested)
 
         # webview.start blocks the main thread. func/args gets called after
         # the first load (pywebview-internal), so evaluate_js hits a

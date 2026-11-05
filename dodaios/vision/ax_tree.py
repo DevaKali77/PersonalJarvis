@@ -312,6 +312,12 @@ class AXTreeSource:
             logger.debug("frontmost-application lookup failed", exc_info=True)
             return ("", 0, [])
 
+        # The app's own WKWebView cannot be queried from this worker thread.
+        # Keep its screenshot available without traversing its AX tree.
+        import os
+        if pid == os.getpid():
+            return (window_title, pid, [])
+
         try:
             root = AXUIElementCreateApplication(pid)
         except Exception:  # noqa: BLE001
