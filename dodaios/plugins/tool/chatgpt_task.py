@@ -10,8 +10,9 @@ class ChatGPTTaskTool:
     name = "chatgpt_task"
     risk_tier = "ask"
     description = (
-        "Send the exact approved prompt to a named existing ChatGPT/Codex desktop chat, "
-        "wait for its completed response, and return the verified answer. Supply the exact "
+        "Send the exact approved prompt to a verified regular ChatGPT desktop chat; "
+        "Codex/Work is a separate client and is not a regular ChatGPT chat. "
+        "Wait for its completed response and return the verified answer. Supply the exact "
         "chat title and prompt. Never infer a target chat. This is one tracked task: a pending "
         "receipt means still working, not delivered or complete. Use task_status to follow it; "
         "never repeat an uncertain submission. Existing drafts are preserved."
