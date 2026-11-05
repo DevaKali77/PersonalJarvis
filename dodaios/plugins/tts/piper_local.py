@@ -304,7 +304,7 @@ class PiperLocalTTS:
                 # after the producer observes stopped and skips its sentinel.
                 try:
                     item = await asyncio.to_thread(chunks.get, True, 0.1)
-                except queue.Empty:
+                except queue.Empty:  # Bounded poll; no PCM yet, check producer again.
                     continue
                 if item is end:
                     break
