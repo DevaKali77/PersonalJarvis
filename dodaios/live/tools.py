@@ -874,21 +874,6 @@ class LiveTools:
                         "Use open_chatgpt_chat or open_app. Nothing was sent."
                     ),
                 }
-        if canonical == "chatgpt_task" and sys.platform == "darwin":
-            # The native ChatGPT.app on this Mac is Codex Work, not regular
-            # ChatGPT chat. Refuse BEFORE triggering the ask-tier approval.
-            from dodaios.cu.chat_navigation import installed_chatgpt_bundle_id
-            if installed_chatgpt_bundle_id() == "com.openai.codex":
-                return {
-                    "success": False, "executed": False,
-                    "status": "codex_not_regular_chatgpt",
-                    "error": (
-                        "The installed ChatGPT.app is Codex/Work, not ordinary "
-                        "ChatGPT. No cursor action or message was sent. "
-                        "Use the regular ChatGPT browser and a saved conversation "
-                        "link to navigate; Work usage limits do not apply."
-                    ),
-                }
         descriptor = next((d for d in self.catalog() if d.name == canonical), None)
         if descriptor is None:
             return {
