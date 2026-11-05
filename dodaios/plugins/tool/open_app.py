@@ -279,30 +279,32 @@ class OpenAppTool:
         if not app_name:
             return ToolResult(success=False, output=None, error="app_name is missing")
 
-        # On this Mac, /Applications/ChatGPT.app is actually the Codex/Work
-        # client (com.openai.codex). Regular ChatGPT conversation requests
-        # must not be redirected into exhausted Work/Codex sessions. Launch
-        # the regular ChatGPT web endpoint through OS services, with NO mouse.
+        # ChatGPT's NEW unified macOS desktop app contains Chat, Work and
+        # Codex under the same CFBundleIdentifier (com.openai.codex). The
+        # bundle ID is not proof of the selected mode. Open the EXISTING native
+        # window, never Chrome or an unrelated browser bookmark.
         if detect_platform() == "darwin" and app_name.casefold() in {
             "chatgpt", "chat gpt", "chatgpt app", "chatgpt application"
         }:
-            from dodaios.cu.chat_navigation import (
-                CHATGPT_HOME, launch_chatgpt_url,
-            )
             try:
-                await asyncio.to_thread(launch_chatgpt_url, CHATGPT_HOME)
-            except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                await asyncio.to_thread(
+                    subprocess.run, ["open", "-a", "ChatGPT"], shell=False,
+                    check=True, capture_output=True, timeout=10,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
                 return ToolResult(
                     success=False, output=None,
-                    error=f"Unable to open regular ChatGPT in Chrome: {exc}. "
+                    error=f"Could not activate the ChatGPT desktop app: {exc}. "
                           "No mouse or browser tab clicks were attempted.",
                 )
             return ToolResult(
                 success=True,
                 output=(
-                    "Regular ChatGPT opened through the browser's native URL "
-                    "launcher, not the Codex/Work app. The OS accepted navigation, "
-                    "but no particular chat is verified. No message was sent."
+                    "Activated the existing ChatGPT desktop app using macOS "
+                    "Launch Services (no browser, no mouse). Chat, Work and "
+                    "Codex are modes within it; the previously selected mode "
+                    "remains unchanged. No named chat was verified, and no "
+                    "message was sent."
                 ),
             )
 
