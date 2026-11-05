@@ -487,13 +487,13 @@ class OpenAppTool:
                 app=app_name,
             )
             return ToolResult(success=True, output=output)
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError as exc:  # Return an explicit refused-launch tool error.
             return ToolResult(
                 success=False, output=None,
                 error=f"The operating system refused the launch (exit {exc.returncode}). "
                 "The target was not confirmed open; do not report success.",
             )
-        except FileNotFoundError:
+        except FileNotFoundError:  # Caller receives a localized not-found failure.
             from dodaios.voice.action_phrases import action_phrase  # noqa: PLC0415
 
             return ToolResult(
@@ -503,5 +503,5 @@ class OpenAppTool:
                     "open_app_not_found", _output_language(ctx), app=app_name,
                 ),
             )
-        except OSError as exc:
+        except OSError as exc:  # Report the OS failure through ToolResult, not a fake success.
             return ToolResult(success=False, output=None, error=str(exc))
