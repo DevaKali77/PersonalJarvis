@@ -473,7 +473,10 @@ class OpenAppTool:
                         "[open_app] raise_after_launch for %r exceeded 6s — "
                         "reporting the launch without the raise", app_name,
                     )
-                except Exception:  # noqa: BLE001 — never fail a successful launch
+                except Exception:
+                    # OS launch succeeded; optional window-raise failed, so log it
+                    # and keep the honest launch receipt rather than inventing focus.
+                    logger.debug("[open_app] window raise after launch failed for %r", app_name, exc_info=True)
                     raised = False
             from dodaios.voice.action_phrases import action_phrase  # noqa: PLC0415
 
