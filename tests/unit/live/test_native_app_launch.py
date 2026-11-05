@@ -53,6 +53,8 @@ async def test_launch_keeps_gateway_safety_and_reports_denial(tmp_path, allowed)
     try:
         result = await tools.execute("launch-one", "open_app", {"app_name": "Calculator"}, 0)
         assert result["success"] is allowed
+        assert result["verified"] is False
+        assert result["launch_accepted"] is allowed
         assert gateway.calls == [("open_app", {"app_name": "Calculator"})]
     finally:
         await tools.close()

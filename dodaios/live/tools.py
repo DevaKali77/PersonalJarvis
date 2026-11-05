@@ -63,7 +63,7 @@ _REQUEST_TEXT_CHARS = 1200
 # 2026-10-14, a busy catalog sorted show_on_screen past the budget).
 _PRIORITY_TOOLS = frozenset({"find-app-action", "run-app-action", *NAMED_TOOLS})
 # Declared under its canonical name in every mode (see ``declarations``).
-_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app"})
+_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app", "chatgpt_task"})
 # One screen, one mouse: these never run side by side, and a result that
 # arrives after the user asked for something else describes a screen that has
 # moved on. ``computer_use`` is the delegated vehicle for the same screen.
@@ -817,7 +817,7 @@ class LiveTools:
                     "approval_ids": list(self._pending),
                     "next_step": "Ask for a plain yes or no, then call confirm_action again.",
                 }
-            trace, _, _, _ = self._pending.pop(approval_id)
+            trace, pending_name, _, _ = self._pending.pop(approval_id)
             from dodaios.core.model_selection import ModelSelection, use_operation_model
 
             self._confirming.add(approval_id)
@@ -833,7 +833,7 @@ class LiveTools:
                     result = await self.gateway.execute_confirmed(trace, self._request(trace))
             finally:
                 self._confirming.discard(approval_id)
-            return self._result(result)
+            return self._result(result, tool_name=pending_name)
         canonical = self._names.get(name, name)
         if name == "call_tool":
             canonical = str(args.get("name", ""))
@@ -921,7 +921,7 @@ class LiveTools:
                 "impact": result.output,
                 "next_step": _APPROVAL_NEXT_STEP,
             }
-        return self._result(result)
+        return self._result(result, tool_name=canonical)
 
     @property
     def user_text(self) -> str:
@@ -1055,7 +1055,7 @@ class LiveTools:
         )
 
     @staticmethod
-    def _result(result: Any) -> dict:
+    def _result(result: Any, *, tool_name: str = "") -> dict:
         from dodaios.core.redact import redact_secrets
 
         payload = {
@@ -1063,10 +1063,18 @@ class LiveTools:
             "output": result.output,
             "error": result.error,
             "artifacts": list(getattr(result, "artifacts", ())),
-            "verified": not (
+            "verified": bool(result.success) and not (
                 isinstance(result.output, dict) and result.output.get("verified") is False
             ),
         }
+        if tool_name == "open_app":
+            payload["launch_accepted"] = bool(result.success)
+            payload["verified"] = False
+            payload["next_step"] = (
+                "Take a fresh screenshot before claiming the requested window is visible. "
+                "Previous screenshot frame IDs are stale after an app launch."
+                if result.success else "The launch failed. Do not claim the app or window opened."
+            )
         images = take_images(payload)
         sanitized = json.loads(redact_secrets(json.dumps(payload, default=str)))
         sanitized["artifacts"].extend({**image, "type": "image"} for image in images)

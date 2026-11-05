@@ -239,7 +239,8 @@ class OpenAppTool:
     description: str = (
         "Opens an application on this computer by name (e.g. 'notepad', "
         "'calc', 'chrome', 'Google Chrome') or opens a file/URL. Works on "
-        "Windows, macOS, and Linux."
+        "Windows, macOS, and Linux. Use 'Downloads' for this user's Downloads "
+        "folder, or ~/ for this user's home; never guess a username."
     )
     schema: dict[str, Any] = {
         "type": "object",
@@ -268,6 +269,12 @@ class OpenAppTool:
 
     async def execute(self, args: dict[str, Any], ctx: ExecutionContext) -> ToolResult:
         app_name = (args.get("app_name") or "").strip()
+        if app_name.casefold() in {"downloads", "my downloads", "downloads folder"}:
+            from dodaios.platform.user_dirs import downloads_dir
+
+            app_name = str(downloads_dir())
+        elif app_name.startswith("~/"):
+            app_name = os.path.expanduser(app_name)
         cli_args = (args.get("arguments") or "").strip()
         if not app_name:
             return ToolResult(success=False, output=None, error="app_name is missing")
@@ -378,10 +385,16 @@ class OpenAppTool:
                 argv = ["open", "-a", value]
                 if cli_args:
                     argv += ["--args", *cli_args.split()]
-                subprocess.Popen(argv, shell=False)  # noqa: ASYNC220, S606
+                await asyncio.to_thread(
+                    subprocess.run, argv, shell=False, check=True,
+                    capture_output=True, timeout=10,
+                )
             elif kind == "xdg_open":
                 # Linux: `xdg-open <name>` (MIME/.desktop handler; takes no args).
-                subprocess.Popen(["xdg-open", value], shell=False)  # noqa: ASYNC220, S606
+                await asyncio.to_thread(
+                    subprocess.run, ["xdg-open", value], shell=False,
+                    check=True, capture_output=True, timeout=10,
+                )
             elif kind == "executable":
                 # Direct executable on PATH/absolute. The Windows verb passes the
                 # raw cli_args string verbatim (AD-7, unchanged); the POSIX
@@ -412,7 +425,18 @@ class OpenAppTool:
                     # branch), but exec'ing a URL dies with FileNotFoundError.
                     # Hand it to the OS opener instead (browser+URL fast-path).
                     opener = "open" if detect_platform() == "darwin" else "xdg-open"
-                    subprocess.Popen([opener, value], shell=False)  # noqa: ASYNC220, S606
+                    from pathlib import Path
+
+                    if is_path and not Path(value).exists():
+                        return ToolResult(
+                            success=False, output=None,
+                            error="The requested path does not exist. For this user's Downloads, "
+                            "use app_name='Downloads'; never invent a home-directory username.",
+                        )
+                    await asyncio.to_thread(
+                        subprocess.run, [opener, value], shell=False,
+                        check=True, capture_output=True, timeout=10,
+                    )
             # Actively bring the freshly launched window to the foreground. A
             # bare Popen / os.startfile is fire-and-forget: the new window is
             # frequently left in the background (Windows foreground-lock-steal,
@@ -458,6 +482,12 @@ class OpenAppTool:
                 app=app_name,
             )
             return ToolResult(success=True, output=output)
+        except subprocess.CalledProcessError as exc:
+            return ToolResult(
+                success=False, output=None,
+                error=f"The operating system refused the launch (exit {exc.returncode}). "
+                "The target was not confirmed open; do not report success.",
+            )
         except FileNotFoundError:
             from dodaios.voice.action_phrases import action_phrase  # noqa: PLC0415
 

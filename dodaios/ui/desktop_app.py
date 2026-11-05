@@ -6465,6 +6465,14 @@ class DesktopApp:
 
         install_macos_microphone_permission(self._url())
 
+        from dodaios.ui.macos_quit import install_macos_quit_handler
+
+        def _native_quit_requested() -> None:
+            self._user_requested_quit = True
+            self._begin_quit_from_close()
+
+        install_macos_quit_handler(_native_quit_requested)
+
         # webview.start blocks the main thread. func/args gets called after
         # the first load (pywebview-internal), so evaluate_js hits a
         # DOM-ready context.

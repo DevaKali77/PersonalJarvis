@@ -91,3 +91,34 @@ passed afterward. The focused live-session, subscription computer-control,
 direct-computer and follow-up suite passed all 117 tests. On-disk changes need
 the user's deliberate app quit/reopen; no automatic restart or listening was
 performed. A new spoken Calculator request must confirm actual Gemini routing.
+
+## Quit crash, Downloads and tracked ChatGPT work
+
+The supplied macOS crash report records native AppKit termination on the main
+thread while a background PySide/Shiboken import crashes during exit. Route
+the native Quit delegate through the existing desktop cleanup owner, returning
+NSTerminateCancel and stopping the Cocoa loop so `webview.start` returns. The
+existing bounded cleanup and process-exit path retain ownership. This addresses
+the observed quit-time race; it does not prove every possible crash resolved.
+
+The supplied Downloads test passed an invented home directory to `open_app`.
+Resolve `Downloads` and `~/` using the current user, refuse absent paths, and
+await the system opener's bounded completion so a failed launch is not reported
+as successful. A launch receipt is not proof that the window is visible. Native
+voice now receives an unverified launch receipt with a fresh-screenshot step;
+failed actions can never carry `verified=true`. Refresh frame IDs after launch.
+
+`chatgpt_task` is an ask-tier, directly declared voice tool for an exact prompt
+and named existing chat. It reuses the guarded single-submission transaction and
+returns only after a verified completed reply or an explicit failure. The native
+session's existing pending-task mechanism keeps long work tracked; `task_status`
+follows it. It is task-scoped, not continuous screen or microphone recording.
+An ambiguous chat, draft, foreground change, denied action, timeout or uncertain
+submission must fail closed. A real named-chat delivery/readback test remains
+required; do not describe this staged integration as certified.
+
+Validation: 288 focused shutdown, launch, gateway, live-task, prompt-transaction
+and safety tests passed. An isolated real Cocoa delegate test confirmed native
+termination was cancelled and the cleanup owner invoked, without touching the
+running app. A real Downloads launch through ToolExecutor succeeded; a separate
+Finder front-window target check verified the actual user's Downloads folder.
