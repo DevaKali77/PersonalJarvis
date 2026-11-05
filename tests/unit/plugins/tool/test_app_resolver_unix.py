@@ -196,7 +196,7 @@ async def test_execute_open_a_launches_via_open_dash_a(
     _force_platform(monkeypatch, "darwin")
     calls: list[tuple[list[str], dict]] = []
     monkeypatch.setattr(
-        subprocess, "Popen", lambda argv, **kw: calls.append((argv, kw))
+        subprocess, "run", lambda argv, **kw: calls.append((argv, kw))
     )
     # Make safari plausible on this leg and force the open_a resolution.
     monkeypatch.setattr(open_app, "KNOWN_APPS", open_app._KNOWN_APPS_DARWIN)
@@ -207,7 +207,7 @@ async def test_execute_open_a_launches_via_open_dash_a(
     result = await OpenAppTool().execute({"app_name": "safari"}, _ctx())
 
     assert result.success is True
-    assert calls == [(["open", "-a", "Safari"], {"shell": False})]
+    assert calls == [(["open", "-a", "Safari"], {"shell": False, "check": True, "capture_output": True, "timeout": 10})]
 
 
 @pytest.mark.asyncio
@@ -217,7 +217,7 @@ async def test_execute_xdg_open_launches_via_xdg(
     _force_platform(monkeypatch, "linux")
     calls: list[tuple[list[str], dict]] = []
     monkeypatch.setattr(
-        subprocess, "Popen", lambda argv, **kw: calls.append((argv, kw))
+        subprocess, "run", lambda argv, **kw: calls.append((argv, kw))
     )
     monkeypatch.setattr(open_app, "KNOWN_APPS", open_app._KNOWN_APPS_LINUX)
     monkeypatch.setattr(
@@ -229,7 +229,7 @@ async def test_execute_xdg_open_launches_via_xdg(
     result = await OpenAppTool().execute({"app_name": "nautilus"}, _ctx())
 
     assert result.success is True
-    assert calls == [(["xdg-open", "nautilus"], {"shell": False})]
+    assert calls == [(["xdg-open", "nautilus"], {"shell": False, "check": True, "capture_output": True, "timeout": 10})]
 
 
 @pytest.mark.asyncio
@@ -264,7 +264,7 @@ async def test_execute_open_a_with_args_splits_into_dash_dash_args(
     _force_platform(monkeypatch, "darwin")
     calls: list[tuple[list[str], dict]] = []
     monkeypatch.setattr(
-        subprocess, "Popen", lambda argv, **kw: calls.append((argv, kw))
+        subprocess, "run", lambda argv, **kw: calls.append((argv, kw))
     )
     monkeypatch.setattr(open_app, "KNOWN_APPS", open_app._KNOWN_APPS_DARWIN)
     monkeypatch.setattr(
@@ -277,7 +277,7 @@ async def test_execute_open_a_with_args_splits_into_dash_dash_args(
 
     assert result.success is True
     assert calls == [
-        (["open", "-a", "Safari", "--args", "--foo", "bar"], {"shell": False})
+        (["open", "-a", "Safari", "--args", "--foo", "bar"], {"shell": False, "check": True, "capture_output": True, "timeout": 10})
     ]
 
 
@@ -299,7 +299,7 @@ async def test_execute_url_uses_os_opener_on_posix(
     _force_platform(monkeypatch, plat)
     calls: list[tuple[list[str], dict]] = []
     monkeypatch.setattr(
-        subprocess, "Popen", lambda argv, **kw: calls.append((argv, kw))
+        subprocess, "run", lambda argv, **kw: calls.append((argv, kw))
     )
     # POSIX runtimes have no os.startfile — simulate that from the Windows box.
     monkeypatch.delattr(os, "startfile", raising=False)
@@ -309,4 +309,5 @@ async def test_execute_url_uses_os_opener_on_posix(
     assert result.success
     assert calls, "no launch happened"
     assert calls[0][0] == [opener, "https://x.com"]
-    assert calls[0][1].get("shell", False) is False
+    assert calls[0][1]["shell"] is False
+    assert calls[0][1]["check"] is True
