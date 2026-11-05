@@ -61,7 +61,12 @@
 name: CI
 
 on:
+  # Draft work is intentionally review-only: defer expensive tests until
+  # ready_for_review, then re-test every synchronize as long as it is ready.
+  # This suppresses repeated failing runs/notifications during prototyping,
+  # without weakening the CI gate for mergeable changes.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   push:
@@ -115,6 +120,7 @@ jobs:
   # list. The job id plus the matrix value reads cleanly in both states.
   detect:
     name: detect lanes
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -1284,7 +1290,7 @@ jobs:
       - agent-runtimes-unit
       - agent-runtimes-headless
       - agent-runtimes-e2e
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
