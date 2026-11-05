@@ -411,13 +411,23 @@ class OpenAppTool:
                         [value], shell=False, creationflags=no_window
                     )
             else:  # kind == "startfile" — Windows-only shell verb (AD-7).
+                from pathlib import Path
+
+                # URLs contain ":/" too, but are not local filesystem paths.
+                # Check real paths before the launcher on every OS.
+                if is_path and not is_url and not Path(value).exists():
+                    return ToolResult(
+                        success=False, output=None,
+                        error="The requested path does not exist. For this user's Downloads, "
+                        "use app_name='Downloads'; never invent a home-directory username.",
+                    )
                 if cli_args:
                     subprocess.Popen(  # noqa: ASYNC220, S606
                         ["cmd", "/c", "start", "", value, cli_args],
                         shell=False,
                         creationflags=no_window,
                     )
-                elif hasattr(os, "startfile"):
+                elif detect_platform() == "win32" and hasattr(os, "startfile"):
                     os.startfile(value)  # type: ignore[attr-defined]  # noqa: S606
                 else:
                     # POSIX: URLs/paths resolve to "startfile" on every OS
@@ -425,14 +435,6 @@ class OpenAppTool:
                     # branch), but exec'ing a URL dies with FileNotFoundError.
                     # Hand it to the OS opener instead (browser+URL fast-path).
                     opener = "open" if detect_platform() == "darwin" else "xdg-open"
-                    from pathlib import Path
-
-                    if is_path and not Path(value).exists():
-                        return ToolResult(
-                            success=False, output=None,
-                            error="The requested path does not exist. For this user's Downloads, "
-                            "use app_name='Downloads'; never invent a home-directory username.",
-                        )
                     await asyncio.to_thread(
                         subprocess.run, [opener, value], shell=False,
                         check=True, capture_output=True, timeout=10,
