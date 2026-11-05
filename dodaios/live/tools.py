@@ -63,7 +63,7 @@ _REQUEST_TEXT_CHARS = 1200
 # 2026-10-14, a busy catalog sorted show_on_screen past the budget).
 _PRIORITY_TOOLS = frozenset({"find-app-action", "run-app-action", *NAMED_TOOLS})
 # Declared under its canonical name in every mode (see ``declarations``).
-_DIRECT_TOOLS = frozenset({"computer", "take_appshot"})
+_DIRECT_TOOLS = frozenset({"computer", "take_appshot", "open_app"})
 # One screen, one mouse: these never run side by side, and a result that
 # arrives after the user asked for something else describes a screen that has
 # moved on. ``computer_use`` is the delegated vehicle for the same screen.
@@ -331,7 +331,10 @@ class LiveTools:
         ]
         # The screen is operated in many short rounds (ADR-0039): declare the
         # computer tool under its own name instead of behind discover/call_tool.
-        # Keep capture available even with a deferred catalog. Otherwise a live
+        # Keep native app launch and capture available even with a deferred catalog.
+        # Launching an app must not require typing into Spotlight, which can
+        # be refused by Secure Input independently of native app launch.
+        # Otherwise a live
         # model may reuse an old image or choose computer instead of the appshot
         # path that owns privacy filtering, the shutter effect and the receipt.
         for descriptor in self.catalog():

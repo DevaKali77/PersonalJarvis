@@ -74,3 +74,20 @@ ChatGPT chat. Those require a deliberate user voice test and explicit target.
 Codex CLI subscription voice also remains incompatible with the installed
 adapter's strict supported-version check; do not bypass that check or downgrade
 an unrelated working Codex installation as part of these repairs.
+
+## Follow-up: voice app launch and Secure Input
+
+The user's actual Gemini test heard the Calculator request but chose keyboard
+computer-control actions, which were refused while Secure Input was active.
+Native app launch was only exposed under a catalog alias (or discovery in a
+deferred catalog). It is now declared directly as `open_app`, retained under
+small model budgets, and explicitly preferred over Spotlight keystrokes for
+application-launch requests. Normal supervisor gateway execution and approval
+results are unchanged. A keyboard refusal is never worked around through
+another input mechanism; Secure Input detection and enforcement are untouched.
+
+The new regression failed three declaration checks before the change and
+passed afterward. The focused live-session, subscription computer-control,
+direct-computer and follow-up suite passed all 117 tests. On-disk changes need
+the user's deliberate app quit/reopen; no automatic restart or listening was
+performed. A new spoken Calculator request must confirm actual Gemini routing.

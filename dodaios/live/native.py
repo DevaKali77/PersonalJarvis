@@ -50,6 +50,7 @@ _TOOL_DEADLINE_S = VOICE_TOOL_BUDGET_S
 _SESSION_TOOLS = frozenset({
     "end_call", "discover_tools", "call_tool", "confirm_action", "task_status",
     "computer", "take_appshot",
+    "open_app",
 })
 # Under a declaration budget (a provider's ``tool_declaration_budget_tokens``
 # or ``[voice].realtime_tool_declaration_budget_tokens``, the smaller wins), at
