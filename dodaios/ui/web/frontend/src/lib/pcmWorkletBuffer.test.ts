@@ -104,6 +104,6 @@ describe("BoundedPcm16Queue", () => {
   });
 
   it("bounds a 48 kHz queue to ten seconds of PCM16", () => {
-    expect(playbackBufferSampleCount(48_000)).toBe(480_000);
+    expect(playbackBufferSampleCount(48_000)).toBe(2_880_000);
   });
 });

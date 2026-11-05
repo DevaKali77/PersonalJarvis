@@ -851,6 +851,11 @@ export class RealtimeAudioClient {
       this.captureNode.port.onmessage = (event) => this.handleCapture(event);
       this.playbackNode = new AudioWorkletNode(this.ctx, "pcm-playback");
       this.playbackNode.port.onmessage = (event: MessageEvent) => {
+        if (event.data?.type === "playback_error") {
+          this.cb.onStatus?.("provider_error", { error: String(event.data.message) });
+          void this.disconnect();
+          return;
+        }
         // RTP is measured by pcm-level. The unused PCM queue produces zeros
         // and must not erase the real output meter thirty times per second.
         if (this.options.browserAudio && this.options.requiresWebRtcOffer && !this.timedOutput) return;

@@ -4,12 +4,11 @@ export const CAPTURE_PACKET_SECONDS = 0.02;
 /**
  * Maximum playback backlog retained inside the AudioWorklet.
  *
- * Ten seconds absorbs substantial scheduler/network jitter while keeping the
- * queue below 1 MiB at 48 kHz (PCM16). If a provider outruns playback beyond
- * this bound, the queue drops its oldest samples so latency cannot grow
- * without limit.
+ * A minute accommodates replies generated faster than they can be spoken.
+ * Storage stays bounded to 5.76 MB at 48 kHz (PCM16). The speech timeline
+ * rejects an overrun before the generic ring could discard any queued words.
  */
-export const MAX_PLAYBACK_BUFFER_SECONDS = 10;
+export const MAX_PLAYBACK_BUFFER_SECONDS = 60;
 
 /**
  * Jitter reserve banked before playback starts and after a true underrun.

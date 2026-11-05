@@ -841,4 +841,12 @@ class NativeLiveVoiceSession(LiveVoiceSession):
             else:
                 await asyncio.to_thread(self._ledger.close)
         self._closed.set()
-        await self._send_json({"type": "audio_closed"})
+        # The browser may close its socket before hangup cleanup finishes.
+        # Cleanup has succeeded; a lost final receipt must not turn a normal
+        # hangup into a failed voice session.
+        from starlette.websockets import WebSocketDisconnect
+
+        try:
+            await self._send_json({"type": "audio_closed"})
+        except (WebSocketDisconnect, ConnectionError):
+            log.debug("Voice peer disconnected before the closing receipt")

@@ -2847,9 +2847,9 @@ class BrainManager:
         self, name: str, fallback: str | None = None
     ) -> str | None:
         """Resolve an explicit Tool Model pin before a caller's model choice."""
-        from dodaios.core.model_selection import operation_model, worker_selection
+        from dodaios.core.model_selection import tool_selection
 
-        selection = operation_model.get() or worker_selection(self._config)
+        selection = tool_selection(self._config)
         if selection is not None and selection.provider == name:
             return selection.model or fallback or get_tier_default_model("worker", name)
         cfg = self._provider_cfg(name)
@@ -2865,9 +2865,9 @@ class BrainManager:
 
     def _tool_model_provider(self) -> str:
         """Return the canonical Tool Model provider or its legacy fallback."""
-        from dodaios.core.model_selection import operation_model, worker_selection
+        from dodaios.core.model_selection import tool_selection
 
-        selection = operation_model.get() or worker_selection(self._config)
+        selection = tool_selection(self._config)
         if selection is not None:
             return selection.provider
         try:
@@ -3075,9 +3075,9 @@ class BrainManager:
         self, chain: list[tuple[str, str | None]]
     ) -> list[tuple[str, str | None]]:
         """Filter a delegated turn to tool-capable cross-family candidates."""
-        from dodaios.core.model_selection import operation_model, worker_selection
+        from dodaios.core.model_selection import tool_selection
 
-        selection = operation_model.get() or worker_selection(self._config)
+        selection = tool_selection(self._config)
         if selection is not None:
             # A selected subscription must not silently turn into metered API usage.
             return [(selection.provider, selection.model)]
@@ -10129,6 +10129,15 @@ class BrainManager:
     def _build_fallback_chain(self, level: str) -> list[tuple[str, str | None]]:
         """Returns a prioritised list of (provider, model) attempts."""
         active = self._active_name
+        # Explicit local-only installs must never spend saved cloud keys.
+        if getattr(self._config.brain.policy, "local_only", False):
+            if active not in ("ollama", "local-openai"):
+                raise RuntimeError("Local-only mode requires a local Brain provider.")
+            model = (
+                self._deep_model(active) if level in ("deep", "code")
+                else self._fast_model(active)
+            )
+            return [(active, model or self._fast_model(active))]
         chain: list[tuple[str, str | None]] = []
         # Reset the per-turn router-lead marker every build (a stale value would
         # make the loop wrongly fall through). Set below only when we prepend an

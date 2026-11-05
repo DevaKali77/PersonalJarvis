@@ -253,8 +253,9 @@ class PiperLocalTTS:
             if data:
                 emitted.set()
                 if not _put(data):
-                    return 1
-            return 1 if stopped.is_set() else 0
+                    return 0
+            # sherpa-onnx uses 1 to continue and 0 to stop generation.
+            return 0 if stopped.is_set() else 1
 
         nonlocal_rate = [sample_rate]
 
@@ -298,7 +299,13 @@ class PiperLocalTTS:
         self.last_voice_provider = self.name
         try:
             while True:
-                item = await asyncio.to_thread(chunks.get)
+                # A cancelled consumer cannot cancel a native queue.get().
+                # Bound the wait so cancellation cannot strand a pool thread
+                # after the producer observes stopped and skips its sentinel.
+                try:
+                    item = await asyncio.to_thread(chunks.get, True, 0.1)
+                except queue.Empty:
+                    continue
                 if item is end:
                     break
                 assert isinstance(item, bytes)

@@ -936,6 +936,7 @@ class BrainProviderConfig(BaseModel):
 
 
 class BrainPolicyConfig(BaseModel):
+    local_only: bool = False
     use_routing_model_for_intent: bool = True
     prompt_cache_heartbeat_seconds: int = 240
     voice_switch_patterns: list[str] = Field(

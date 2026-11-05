@@ -126,11 +126,15 @@ class PcmPlayback extends AudioWorkletProcessor {
         this.generation = msg.generation ?? this.generation + 1;
       }
       else if (msg.type === "pcm" && msg.data && !this.muted) {
-        // The bounded ring keeps the newest audio if a provider outruns
-        // playback for more than ten seconds. enqueue() drops the oldest
-        // samples on overrun, preventing stale latency and unbounded memory.
-        this.queue.enqueue(new Int16Array(msg.data), msg.startMs !== undefined && msg.endMs !== undefined
-          ? { startMs: msg.startMs, endMs: msg.endMs } : undefined);
+        try {
+          this.queue.enqueue(new Int16Array(msg.data), msg.startMs !== undefined && msg.endMs !== undefined
+            ? { startMs: msg.startMs, endMs: msg.endMs } : undefined);
+        } catch (error) {
+          this.queue.clear();
+          this.spans = [];
+          this.muted = true;
+          this.port.postMessage({ type: "playback_error", message: String(error) });
+        }
       }
     };
   }

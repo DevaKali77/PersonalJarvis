@@ -44,3 +44,19 @@ def use_operation_model(selection: ModelSelection | None):
         yield
     finally:
         operation_model.reset(token)
+
+
+def tool_selection(config: Any) -> ModelSelection | None:
+    """An explicit Tool Model takes priority over the default mission worker."""
+    selected = operation_model.get()
+    if selected is not None:
+        return selected
+    brain = getattr(config, "brain", None)
+    tier = getattr(brain, "tool_model", None) or getattr(brain, "computer_use", None)
+    provider = str(getattr(tier, "provider", "") or "").strip()
+    if provider and provider != "auto":
+        pc = (getattr(brain, "providers", None) or {}).get(provider)
+        model = (getattr(pc, "tool_model", None) or getattr(pc, "cu_model", None)
+                 or getattr(pc, "model", None))
+        return ModelSelection(provider, model)
+    return worker_selection(config)

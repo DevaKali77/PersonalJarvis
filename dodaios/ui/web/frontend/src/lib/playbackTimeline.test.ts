@@ -84,11 +84,29 @@ describe("source audio to device to transcript", () => {
     expect(readTimedSpeechPlayback("cut")?.chars).toBe(5);
     const queue = new TimedPcmQueue(1000);
     queue.enqueue(new Int16Array(12_000), { startMs: 0, endMs: 12_000 });
-    expect(queue.render(new Float32Array(1000), 0)[0].startMs).toBe(2000);
+    expect(queue.render(new Float32Array(1000), 0)[0].startMs).toBe(0);
     const dropped = new TimedSpeechTracker();
     dropped.text(cue("dropped", "Not heard", 0, 1000));
     dropped.played([{ startMs: 2000, endMs: 3000 }]);
     expect(readTimedSpeechPlayback("dropped")?.chars).toBe(0);
+  });
+
+  it("preserves every word of a reply that arrives faster than playback", () => {
+    const queue = new TimedPcmQueue(1000);
+    for (let i = 0; i < 30; i++) {
+      queue.enqueue(new Int16Array(1000).fill(i + 1), { startMs: i * 1000, endMs: (i + 1) * 1000 });
+    }
+    const heard = [];
+    for (let i = 0; i < 30; i++) heard.push(...queue.render(new Float32Array(1000), i));
+    expect(heard).toHaveLength(30);
+    expect(heard.map(span => span.startMs)).toEqual(Array.from({ length: 30 }, (_, i) => i * 1000));
+  });
+
+  it("rejects overload before deleting speech already waiting to play", () => {
+    const queue = new TimedPcmQueue(1000);
+    queue.enqueue(new Int16Array(60_000), { startMs: 0, endMs: 60_000 });
+    expect(() => queue.enqueue(new Int16Array(1))).toThrow(/fell too far behind/);
+    expect(queue.render(new Float32Array(1000), 0)[0].startMs).toBe(0);
   });
 
   it("uses the device timestamp, and measured latency only on older engines", () => {

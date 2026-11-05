@@ -111,6 +111,10 @@ class ComputerUseTool:
     # honours this flag at dodaios/brain/tool_use_loop.py:662-666 / 709-728.
     suppress_response: bool = True
     description: str = (
+        "For sending a user prompt to an existing ChatGPT/Codex desktop chat "
+        "and reading its answer, supply chatgpt_prompt with the EXACT prompt "
+        "and target_chat with the existing chat title. This runs verified "
+        "type-once, submit-once, wait-and-read stages; prefer it over a broad goal. "
         "Control THIS computer's live desktop with mouse and keyboard: open "
         "apps, click buttons, type into fields, scroll, navigate the screen, "
         "operate any GUI application. Use this for ANY on-screen / app / "
@@ -134,6 +138,8 @@ class ComputerUseTool:
     schema: dict[str, Any] = {
         "type": "object",
         "properties": {
+            "chatgpt_prompt": {"type": "string", "description": "Exact user-authorized prompt to send to ChatGPT desktop; omit for other desktop tasks."},
+            "target_chat": {"type": "string", "description": "Exact title of the existing ChatGPT chat to receive the prompt."},
             "goal": {
                 "type": "string",
                 "description": (
@@ -209,6 +215,11 @@ class ComputerUseTool:
                     "Do not retry this tool in this turn."
                 ),
             )
+        prompt_flow = None
+        if args.get("chatgpt_prompt"):
+            if not str(args.get("target_chat") or "").strip():
+                return ToolResult(success=False, output=None, error="target_chat is required for ChatGPT prompt submission")
+            prompt_flow = (str(args["chatgpt_prompt"]), str(args["target_chat"]))
         # Wave 0 (frontier-speed, 2026-06-09): with a bus wired (production),
         # the mission runs as a BACKGROUND task and the brain turn gets an
         # immediate ACK. Run inline, the mission would live inside the brain
@@ -218,6 +229,11 @@ class ComputerUseTool:
         # Without a bus there is nowhere to announce, so the old synchronous
         # contract stays (tests / minimal wiring).
         if self._bus is None:
+            if prompt_flow is not None:
+                from dodaios.cu.chatgpt_desktop_flow import dispatch_prompt_flow
+                return await dispatch_prompt_flow(self._dispatch, ctx,
+                    prompt=prompt_flow[0], target=prompt_flow[1],
+                    timeout_s=self._timeout_s, language=_ctx_output_language(ctx))
             return await self._dispatch.execute(
                 {
                     "harness": HARNESS_NAME,
@@ -229,6 +245,8 @@ class ComputerUseTool:
                 ctx,
             )
         goal_key = " ".join(goal.split()).casefold()
+        if prompt_flow is not None:
+            goal_key += repr(prompt_flow)
         running = self._active_goals.get(goal_key)
         if running is not None and not running.done():
             log.info(
@@ -240,7 +258,7 @@ class ComputerUseTool:
                 output=action_phrase("cu_dispatch_ack", _ctx_output_language(ctx)),
             )
         task = asyncio.create_task(
-            self._run_background(goal, ctx), name="computer-use-tool-background",
+            self._run_background(goal, ctx, prompt_flow=prompt_flow), name="computer-use-tool-background",
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
@@ -259,7 +277,7 @@ class ComputerUseTool:
             output=action_phrase("cu_dispatch_ack", ack_lang),
         )
 
-    async def _run_background(self, goal: str, ctx: ExecutionContext) -> None:
+    async def _run_background(self, goal: str, ctx: ExecutionContext, *, prompt_flow: tuple[str, str] | None = None) -> None:
         """Run the mission off the brain turn and announce the outcome.
 
         Never raises — a background crash must not leak into the event loop.
@@ -274,18 +292,21 @@ class ComputerUseTool:
         text: str
         detail: str | None = None
         try:
-            result = await self._dispatch.execute(
-                {
-                    "harness": HARNESS_NAME,
-                    "prompt": goal,
-                    "timeout_s": self._timeout_s,
-                    # Thread the turn's resolved language to the in-harness
-                    # verifier so its `proof` is spoken back in the user's
-                    # language, matching the frame (live bug 2026-06-27).
-                    "env": {OUTPUT_LANGUAGE_ENV_KEY: lang},
-                },
-                ctx,
-            )
+            if prompt_flow is not None:
+                from dodaios.cu.chatgpt_desktop_flow import dispatch_prompt_flow
+                result = await dispatch_prompt_flow(self._dispatch, ctx,
+                    prompt=prompt_flow[0], target=prompt_flow[1],
+                    timeout_s=self._timeout_s, language=lang)
+            else:
+                result = await self._dispatch.execute(
+                    {
+                        "harness": HARNESS_NAME,
+                        "prompt": goal,
+                        "timeout_s": self._timeout_s,
+                        "env": {OUTPUT_LANGUAGE_ENV_KEY: lang},
+                    },
+                    ctx,
+                )
             if result.success:
                 # Forward the verifier's on-screen observation (sitting in the
                 # harness stdout) as the readback, so an informational request

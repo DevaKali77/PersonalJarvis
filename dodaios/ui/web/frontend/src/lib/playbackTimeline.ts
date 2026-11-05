@@ -1,4 +1,4 @@
-import { JitterBufferedPcm16Queue } from "./pcmWorkletBuffer";
+import { JitterBufferedPcm16Queue, playbackBufferSampleCount } from "./pcmWorkletBuffer";
 
 /** Source time is preserved across buffering, resampling and device playout. */
 export type AudioInterval = { startMs: number; endMs: number };
@@ -21,9 +21,12 @@ export class TimedPcmQueue {
 
   enqueue(samples: Int16Array, timing?: AudioInterval): void {
     if (!samples.length) return;
+    if (this.audio.length + samples.length > playbackBufferSampleCount(this.rate)) {
+      throw new RangeError("Voice playback fell too far behind. Please start a new call.");
+    }
     this.spans.push({ frames: samples.length, consumed: 0,
       timing: timing && validAudioInterval(timing.startMs, timing.endMs) ? timing : undefined });
-    this.consume(this.audio.enqueue(samples)); // Overrun discards audio, never counts it as heard.
+    this.audio.enqueue(samples);
   }
 
   render(output: Float32Array, contextStart: number): RenderedAudioInterval[] {
