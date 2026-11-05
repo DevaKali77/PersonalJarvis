@@ -76,7 +76,7 @@ def test_url_launcher_never_clicks(monkeypatch):
     monkeypatch.setattr(route.sys, "platform", "darwin")
     monkeypatch.setattr(route.subprocess, "run", lambda *args, **kwargs: captured.append((args, kwargs)))
     route.launch_chatgpt_url(FAKE_URL)
-    assert captured == [((["open", "-a", "Google Chrome", FAKE_URL],), {
+    assert captured == [((["open", "-a", "ChatGPT", FAKE_URL],), {
         "shell": False, "check": True, "capture_output": True, "timeout": 10,
     })]
     with pytest.raises(ValueError):
