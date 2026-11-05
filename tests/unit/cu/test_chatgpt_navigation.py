@@ -142,11 +142,13 @@ async def test_live_guard_refuses_open_only_send():
 async def test_open_chatgpt_app_uses_native_url_not_spotlight(monkeypatch):
     called = []
     monkeypatch.setattr(open_app, "detect_platform", lambda: "darwin")
-    monkeypatch.setattr(route, "launch_chatgpt_url", lambda url: called.append(url))
+    monkeypatch.setattr(open_app.subprocess, "run", lambda argv, **kwargs: called.append((argv, kwargs)))
     monkeypatch.setattr(open_app, "_is_plausible_app_name", lambda name: (_ for _ in ()).throw(AssertionError("No lookup needed")))
     result = await open_app.OpenAppTool().execute({"app_name": "ChatGPT"}, _ctx())
     assert result.success
-    assert called == [route.CHATGPT_HOME]
+    assert called == [(["open", "-a", "ChatGPT"], {
+        "shell": False, "check": True, "capture_output": True, "timeout": 10,
+    })]
     assert "Codex" in result.output
 
 
